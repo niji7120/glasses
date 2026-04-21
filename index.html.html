@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>안경원 고객관리</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --blue: #2563EB; --blue-dark: #1D4ED8; --blue-light: #EFF6FF; --blue-glow: rgba(37,99,235,0.3);
+            --teal: #0D9488; --teal-dark: #0F766E; --teal-light: #F0FDFA; --teal-glow: rgba(13,148,136,0.3);
+            --gray-bg: #F1F5F9; --gray-100: #F8FAFC; --gray-200: #E2E8F0; --gray-400: #94A3B8; --gray-600: #64748B;
+            --black: #0F172A; --white: #FFFFFF;
+            --card-shadow: 0 2px 16px rgba(15,23,42,0.08);
+        }
+        * { box-sizing: border-box; -webkit-overflow-scrolling: touch; }
+        body { margin:0; padding:0; font-family:'Pretendard',-apple-system,sans-serif; background:var(--gray-bg); color:var(--black); -webkit-font-smoothing:antialiased; }
+        input, select, textarea { font-size:16px !important; font-family:'Pretendard',sans-serif; }
+        button { min-height:40px; touch-action:manipulation; font-family:'Pretendard',sans-serif; }
+
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes cardPop { from{opacity:0;transform:scale(0.97) translateY(6px)} to{opacity:1;transform:scale(1) translateY(0)} }
+
+        .spinner { width:40px; height:40px; border:3px solid #E0E0E0; border-top-color:var(--blue); border-radius:50%; animation:spin 0.8s linear infinite; }
+
+        /* ── 헤더 ── */
+        .app-header {
+            background:linear-gradient(180deg,#0F172A 0%,#1E293B 100%);
+            position:sticky; top:0; z-index:30;
+            box-shadow:0 2px 20px rgba(0,0,0,0.4);
+        }
+        .header-top { display:flex; justify-content:space-between; align-items:center; padding:14px 16px 14px; }
+        .header-brand { display:flex; align-items:center; gap:10px; }
+        .header-logo { width:38px; height:38px; background:linear-gradient(135deg,#1D4ED8,#60A5FA); border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow:0 4px 12px var(--blue-glow); }
+        .header-title { font-size:16px; font-weight:900; color:#fff; letter-spacing:0.3px; }
+        .header-sub { font-size:10px; color:#475569; margin-top:1px; font-weight:600; }
+        .logout-btn { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); color:#94A3B8; font-size:11px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer; }
+
+        /* ── 알림 배너 ── */
+        .alert-banner {
+            background:linear-gradient(135deg,#FFF7ED,#FEF3C7); border-bottom:1px solid #FDE68A;
+            padding:10px 16px; display:flex; align-items:center; gap:8px; cursor:pointer;
+        }
+        .alert-count { background:#F59E0B; color:#fff; font-size:11px; font-weight:900; padding:2px 8px; border-radius:20px; }
+
+        /* ── 카드 ── */
+        .customer-card { background:#fff; border-radius:18px; box-shadow:var(--card-shadow); margin-bottom:10px; border:1px solid rgba(0,0,0,0.04); animation:cardPop 0.25s ease both; overflow:hidden; }
+        .card-header { padding:14px 16px 10px; border-bottom:1px solid #F1F5F9; display:flex; justify-content:space-between; align-items:flex-start; }
+        .card-name { font-size:16px; font-weight:900; color:var(--black); }
+        .card-date { font-size:11px; color:var(--gray-400); font-weight:600; }
+        .card-body { padding:12px 16px 14px; }
+        .card-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; }
+        .card-row:last-child { margin-bottom:0; }
+        .card-label { font-size:11px; font-weight:800; color:var(--gray-400); min-width:52px; padding-top:2px; letter-spacing:0.3px; }
+        .card-val { font-size:13px; font-weight:600; color:#334155; flex:1; }
+        .card-total-row { display:flex; justify-content:space-between; align-items:center; padding-top:10px; margin-top:6px; border-top:1px solid #F1F5F9; }
+        .card-total-label { font-size:12px; font-weight:800; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.5px; }
+        .card-total-val { font-size:20px; font-weight:900; color:var(--blue-dark); }
+
+        /* ── 처방전 박스 ── */
+        .rx-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; background:var(--blue-light); border-radius:12px; padding:10px; margin:8px 0; }
+        .rx-cell { text-align:center; }
+        .rx-label { font-size:9px; font-weight:800; color:var(--blue); text-transform:uppercase; letter-spacing:0.5px; }
+        .rx-val { font-size:13px; font-weight:700; color:var(--black); margin-top:2px; }
+
+        /* ── 배지 ── */
+        .badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
+        .badge-blue { background:var(--blue-light); color:var(--blue-dark); border:1px solid #BFDBFE; }
+        .badge-teal { background:var(--teal-light); color:var(--teal-dark); border:1px solid #99F6E4; }
+        .badge-orange { background:#FFF7ED; color:#C2410C; border:1px solid #FED7AA; }
+        .badge-red { background:#FEF2F2; color:#B91C1C; border:1px solid #FECACA; }
+        .badge-gray { background:#F8FAFC; color:#64748B; border:1px solid #E2E8F0; }
+
+        /* ── 방문횟수 ── */
+        .visit-badge { width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#1D4ED8,#3B82F6); color:#fff; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+        /* ── 섹션 ── */
+        .section-card { background:#fff; border-radius:18px; box-shadow:var(--card-shadow); margin-bottom:10px; border:1px solid rgba(0,0,0,0.04); overflow:hidden; }
+        .section-header { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid #F1F5F9; }
+        .section-title { font-size:14px; font-weight:900; color:var(--black); }
+        .section-count { font-size:12px; color:var(--gray-400); font-weight:700; }
+
+        /* ── 폼 ── */
+        .form-card { background:#fff; border-radius:20px; box-shadow:var(--card-shadow); padding:20px; margin-bottom:12px; border:1px solid rgba(0,0,0,0.04); animation:fadeSlideUp 0.3s ease both; }
+        .form-title { font-size:16px; font-weight:900; color:#111; margin-bottom:18px; }
+        .form-label { font-size:11px; font-weight:800; color:#94A3B8; margin-bottom:6px; display:block; text-transform:uppercase; letter-spacing:0.5px; }
+        .form-input { width:100%; padding:12px 14px; border:1.5px solid #E2E8F0; border-radius:12px; font-size:14px; font-weight:600; background:#F8FAFC; outline:none; transition:all 0.2s; color:#111; }
+        .form-input:focus { border-color:var(--blue); background:#fff; box-shadow:0 0 0 3px rgba(37,99,235,0.1); }
+        .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+        .form-grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+        .form-group { margin-bottom:10px; }
+        .form-section-title { font-size:11px; font-weight:800; color:#CBD5E1; text-transform:uppercase; letter-spacing:1px; margin:16px 0 8px; }
+
+        .rx-box { border:1.5px dashed #BFDBFE; border-radius:14px; padding:14px; background:#EFF6FF; margin-bottom:10px; }
+        .rx-box-title { font-size:12px; font-weight:800; color:var(--blue); margin-bottom:10px; }
+
+        .submit-btn { width:100%; padding:15px; border-radius:16px; border:none; cursor:pointer; font-size:15px; font-weight:900; color:#fff; margin-top:8px; transition:all 0.18s; }
+        .submit-btn:active { transform:scale(0.97); }
+        .submit-btn-blue { background:linear-gradient(135deg,#1D4ED8,#3B82F6); box-shadow:0 8px 20px var(--blue-glow); }
+        .submit-btn-gray { background:linear-gradient(135deg,#64748B,#94A3B8); }
+
+        /* ── 통계 ── */
+        .stat-num { font-size:26px; font-weight:900; color:var(--blue-dark); }
+        .stat-label-sm { font-size:11px; font-weight:700; color:var(--gray-400); margin-top:2px; }
+        .mini-stat-card { background:#fff; border-radius:16px; padding:16px; border:1px solid #E2E8F0; flex:1; text-align:center; }
+
+        /* ── 재방문 알림 ── */
+        .reminder-card { background:#fff; border-radius:14px; padding:12px 14px; border-left:4px solid #F59E0B; margin-bottom:8px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+        .reminder-name { font-size:14px; font-weight:800; color:var(--black); }
+        .reminder-sub { font-size:12px; color:var(--gray-400); font-weight:600; margin-top:2px; }
+        .reminder-days { font-size:11px; font-weight:800; padding:3px 9px; border-radius:20px; }
+
+        /* ── 하단 메뉴 ── */
+        .bottom-nav { position:fixed; bottom:0; left:0; right:0; z-index:40; background:rgba(255,255,255,0.95); backdrop-filter:blur(12px); border-top:1px solid rgba(0,0,0,0.08); display:flex; padding:6px 0 env(safe-area-inset-bottom,8px); box-shadow:0 -4px 20px rgba(0,0,0,0.08); }
+        .nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:6px 0; background:none; border:none; cursor:pointer; transition:all 0.18s; }
+        .nav-item:active { transform:scale(0.9); }
+        .nav-icon { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; background:#F5F5F5; transition:all 0.2s; }
+        .nav-item.active .nav-icon { background:linear-gradient(135deg,#1D4ED8,#3B82F6); box-shadow:0 4px 12px var(--blue-glow); }
+        .nav-label { font-size:10px; font-weight:800; color:#bbb; letter-spacing:0.3px; }
+        .nav-item.active .nav-label { color:var(--blue-dark); }
+        .nav-center-btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:none; border:none; cursor:pointer; padding:0; }
+        .nav-center-inner { width:52px; height:52px; border-radius:16px; background:linear-gradient(135deg,#1D4ED8,#3B82F6); box-shadow:0 6px 20px var(--blue-glow); display:flex; align-items:center; justify-content:center; font-size:26px; color:#fff; transition:all 0.18s; margin-top:-8px; }
+        .nav-center-inner.cancel { background:linear-gradient(135deg,#666,#999); box-shadow:0 4px 12px rgba(0,0,0,0.2); }
+        .nav-center-btn:active .nav-center-inner { transform:scale(0.9); }
+        .nav-center-label { font-size:10px; font-weight:800; color:#bbb; margin-top:3px; }
+
+        /* ── 토스트 ── */
+        .toast { position:fixed; top:16px; right:16px; z-index:999; padding:11px 18px; border-radius:14px; font-size:13px; font-weight:800; box-shadow:0 8px 24px rgba(0,0,0,0.18); animation:fadeSlideUp 0.25s ease both; }
+        .toast-saved { background:linear-gradient(135deg,#DBEAFE,#EFF6FF); color:#1D4ED8; border:1px solid #BFDBFE; }
+        .toast-error { background:#FEE2E2; color:#B91C1C; }
+
+        /* ── 로그인 ── */
+        .login-screen { min-height:100vh; background:linear-gradient(180deg,#0F172A 0%,#0d1b3a 100%); display:flex; align-items:center; justify-content:center; padding:20px; }
+        .login-card { background:#1E293B; border:1px solid #334155; border-radius:28px; padding:36px 24px; width:100%; max-width:360px; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+        .login-logo-area { text-align:center; margin-bottom:32px; }
+        .login-logo { width:70px; height:70px; background:linear-gradient(135deg,#1D4ED8,#60A5FA); border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:34px; margin:0 auto 14px; box-shadow:0 8px 28px var(--blue-glow); }
+        .login-title { font-size:22px; font-weight:900; color:#fff; letter-spacing:0.5px; }
+        .login-subtitle { font-size:12px; color:#475569; margin-top:5px; font-weight:600; }
+        .login-label { font-size:11px; font-weight:800; color:#475569; margin-bottom:6px; display:block; text-transform:uppercase; letter-spacing:0.5px; }
+        .login-input { width:100%; padding:13px 14px; border:1.5px solid #334155; border-radius:12px; background:#0F172A; color:#fff; font-size:14px; font-weight:600; outline:none; margin-bottom:12px; transition:all 0.2s; }
+        .login-input:focus { border-color:#3B82F6; box-shadow:0 0 0 3px rgba(59,130,246,0.2); }
+        .login-btn { width:100%; padding:14px; background:linear-gradient(135deg,#1D4ED8,#3B82F6); color:#fff; border:none; border-radius:14px; font-size:15px; font-weight:900; cursor:pointer; margin-top:4px; box-shadow:0 8px 20px var(--blue-glow); }
+        .login-google-btn { width:100%; padding:13px; background:rgba(255,255,255,0.05); color:#cbd5e1; border:1.5px solid #334155; border-radius:14px; font-size:14px; font-weight:700; cursor:pointer; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .login-link { width:100%; background:none; border:none; color:#475569; font-size:12px; font-weight:600; cursor:pointer; margin-top:12px; text-align:center; display:block; }
+
+        /* ── 아코디언 ── */
+        .accordion-header { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; cursor:pointer; background:none; border:none; width:100%; text-align:left; }
+        .accordion-header:active { background:#F8FAFC; }
+
+        /* ── 검색 ── */
+        .search-bar { display:flex; align-items:center; gap:8px; background:#fff; border-radius:14px; padding:10px 14px; box-shadow:var(--card-shadow); border:1px solid #E2E8F0; }
+        .search-input { flex:1; border:none; background:transparent; outline:none; font-size:14px; font-weight:600; color:#111; }
+
+        /* ── 드롭다운 ── */
+        .dropdown-list { position:absolute; z-index:20; width:100%; margin-top:4px; background:#fff; border:1.5px solid #E2E8F0; border-radius:14px; box-shadow:0 12px 36px rgba(0,0,0,0.14); max-height:200px; overflow-y:auto; }
+        .dropdown-item { width:100%; text-align:left; padding:12px 16px; font-size:13px; font-weight:700; color:#111; background:none; border:none; border-bottom:1px solid #F8FAFC; cursor:pointer; }
+        .dropdown-item:last-child { border-bottom:none; }
+        .dropdown-item:active { background:#EFF6FF; }
+
+        /* ── 모달 ── */
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-end; justify-content:center; }
+        .modal-box { background:#fff; border-radius:24px 24px 0 0; padding:24px; width:100%; max-width:480px; box-shadow:0 -8px 40px rgba(0,0,0,0.2); }
+        .modal-title { font-size:16px; font-weight:900; color:#111; margin-bottom:8px; }
+        .modal-msg { font-size:14px; color:#64748B; font-weight:600; margin-bottom:20px; line-height:1.5; }
+        .modal-btns { display:flex; gap:10px; }
+        .modal-btn { flex:1; padding:14px; border-radius:14px; border:none; font-size:14px; font-weight:800; cursor:pointer; }
+        .modal-btn-ok { background:linear-gradient(135deg,#1D4ED8,#3B82F6); color:#fff; }
+        .modal-btn-cancel { background:#F1F5F9; color:#64748B; }
+        .modal-btn-danger { background:linear-gradient(135deg,#B91C1C,#EF4444); color:#fff; }
+
+        ::-webkit-scrollbar { display:none; }
+        .content-pad { padding:0 12px 100px; }
+        .empty-state { text-align:center; padding:40px 20px; color:var(--gray-400); font-size:14px; font-weight:600; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+// ══ Firebase 설정 ══════════════════════════════
+// ⚠️ 아래 설정값을 본인의 Firebase 프로젝트 값으로 교체해주세요!
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.firebasestorage.app",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ── KST 오늘 날짜 ─────────────────────────────
+const getTodayKST = () => {
+    const d = new Date();
+    const kst = new Date(d.getTime() + 9*60*60*1000);
+    return kst.toISOString().split('T')[0];
+};
+
+// ── 초성 검색 ─────────────────────────────────
+const getChosung = (str='') => {
+    const list = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    return [...str].map(c=>{const code=c.charCodeAt(0)-44032;return(code>-1&&code<11172)?list[Math.floor(code/588)]:c;}).join('');
+};
+const matchSearch = (str='',search='') => {
+    if(!search) return true;
+    return str.toLowerCase().includes(search.toLowerCase()) || getChosung(str).includes(search);
+};
+
+// ── 날짜 계산 ─────────────────────────────────
+const daysBetween = (d1, d2) => {
+    const t1 = new Date(d1).getTime(), t2 = new Date(d2).getTime();
+    return Math.round((t2-t1)/(1000*60*60*24));
+};
+const addMonths = (dateStr, months) => {
+    const d = new Date(dateStr);
+    d.setMonth(d.getMonth()+months);
+    return d.toISOString().split('T')[0];
+};
+
+// ══════════════════════════════════════════════
+// 🔐 로그인 화면
+// ══════════════════════════════════════════════
+const LoginScreen = () => {
+    const [email, setEmail] = useState('');
+    const [pw, setPw] = useState('');
+    const [mode, setMode] = useState('login'); // login | register | reset
+    const [loading, setLoading] = useState(false);
+    const [err, setErr] = useState('');
+    const [resetSent, setResetSent] = useState(false);
+
+    const handleSubmit = async () => {
+        setErr(''); setLoading(true);
+        try {
+            if(mode==='login') await auth.signInWithEmailAndPassword(email, pw);
+            else if(mode==='register') await auth.createUserWithEmailAndPassword(email, pw);
+            else { await auth.sendPasswordResetEmail(email); setResetSent(true); }
+        } catch(e) {
+            const msg = {
+                'auth/user-not-found':'등록된 이메일이 없습니다.',
+                'auth/wrong-password':'비밀번호가 틀렸습니다.',
+                'auth/invalid-email':'이메일 형식이 올바르지 않습니다.',
+                'auth/email-already-in-use':'이미 사용 중인 이메일입니다.',
+                'auth/weak-password':'비밀번호는 6자리 이상이어야 합니다.',
+            }[e.code]||'오류가 발생했습니다.';
+            setErr(msg);
+        }
+        setLoading(false);
+    };
+
+    const handleGoogle = async () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try { await auth.signInWithRedirect(provider); }
+        catch(e) { setErr('구글 로그인 오류'); }
+    };
+
+    if(resetSent) return (
+        <div className="login-screen">
+            <div className="login-card" style={{textAlign:'center'}}>
+                <div style={{fontSize:'48px',marginBottom:'12px'}}>📧</div>
+                <h2 style={{fontSize:'18px',fontWeight:800,color:'#fff',marginBottom:'8px'}}>이메일을 확인하세요</h2>
+                <p style={{fontSize:'13px',color:'#475569',marginBottom:'24px'}}>{email}로 재설정 링크를 보냈습니다.</p>
+                <button onClick={()=>{setMode('login');setResetSent(false);}} className="login-btn">로그인으로 돌아가기</button>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="login-screen">
+            <div className="login-card">
+                <div className="login-logo-area">
+                    <div className="login-logo">👓</div>
+                    <h1 className="login-title">안경원 고객관리</h1>
+                    <p className="login-subtitle">처방전부터 매출까지 한 번에</p>
+                </div>
+                <div style={{display:'flex',background:'#0F172A',borderRadius:'14px',padding:'4px',marginBottom:'20px',border:'1px solid #334155'}}>
+                    {['login','register'].map(m=>(
+                        <button key={m} onClick={()=>{setMode(m);setErr('');}} style={{flex:1,padding:'10px',borderRadius:'11px',border:'none',fontSize:'13px',fontWeight:700,cursor:'pointer',background:mode===m?'#1D4ED8':'transparent',color:mode===m?'#fff':'#475569',transition:'all 0.2s'}}>
+                            {m==='login'?'로그인':'회원가입'}
+                        </button>
+                    ))}
+                </div>
+                <label className="login-label">이메일</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} placeholder="이메일 입력" className="login-input"/>
+                {mode!=='reset'&&(
+                    <>
+                        <label className="login-label">비밀번호</label>
+                        <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} placeholder={mode==='register'?'6자리 이상':'비밀번호 입력'} className="login-input"/>
+                    </>
+                )}
+                {err&&<div style={{color:'#EF4444',fontSize:'12px',fontWeight:700,marginBottom:'8px'}}>{err}</div>}
+                <button onClick={handleSubmit} disabled={loading} className="login-btn" style={loading?{opacity:0.5}:{}}>
+                    {loading?'처리 중...':mode==='login'?'🔐 로그인':mode==='register'?'✅ 회원가입':'📧 재설정 메일 발송'}
+                </button>
+                <button onClick={handleGoogle} className="login-google-btn">
+                    <span>G</span> 구글 계정으로 로그인
+                </button>
+                {mode==='login'&&<button onClick={()=>{setMode('reset');setErr('');}} className="login-link">비밀번호를 잊으셨나요?</button>}
+                {mode==='reset'&&<button onClick={()=>{setMode('login');setErr('');}} className="login-link">← 로그인으로 돌아가기</button>}
+            </div>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 📋 처방전 미니 뷰
+// ══════════════════════════════════════════════
+const RxView = ({rx, side='양안'}) => {
+    if(!rx) return null;
+    const eyes = side==='양안' ? ['R (우)', 'L (좌)'] : [side];
+    return (
+        <div className="rx-grid" style={{gridTemplateColumns:side==='양안'?'60px repeat(4,1fr)':'repeat(4,1fr)'}}>
+            {side==='양안'&&<div/>}
+            {['SPH','CYL','AXIS','ADD'].map(h=>(
+                <div key={h} className="rx-cell"><div className="rx-label">{h}</div></div>
+            ))}
+            {side==='양안' ? (
+                ['R','L'].map(eye=>(
+                    <React.Fragment key={eye}>
+                        <div className="rx-cell"><div className="rx-label">{eye}</div></div>
+                        {['SPH','CYL','AXIS','ADD'].map(k=>(
+                            <div key={k} className="rx-cell"><div className="rx-val">{rx[eye]?.[k]||'-'}</div></div>
+                        ))}
+                    </React.Fragment>
+                ))
+            ) : (
+                ['SPH','CYL','AXIS','ADD'].map(k=>(
+                    <div key={k} className="rx-cell"><div className="rx-val">{rx[side]?.[k]||'-'}</div></div>
+                ))
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 👤 고객 카드
+// ══════════════════════════════════════════════
+const CustomerCard = ({visits, onEdit, onDelete, onNewVisit}) => {
+    const [open, setOpen] = useState(false);
+    const [histOpen, setHistOpen] = useState(false);
+    if(!visits||visits.length===0) return null;
+
+    const latest = visits[0];
+    const today = getTodayKST();
+    const nextDate = latest.nextVisit || (latest.purchaseDate ? addMonths(latest.purchaseDate, 12) : null);
+    const daysLeft = nextDate ? daysBetween(today, nextDate) : null;
+
+    let reminderBadge = null;
+    if(daysLeft !== null) {
+        if(daysLeft < 0) reminderBadge = <span className="reminder-days" style={{background:'#FEE2E2',color:'#B91C1C'}}>⚠️ {Math.abs(daysLeft)}일 초과</span>;
+        else if(daysLeft <= 30) reminderBadge = <span className="reminder-days" style={{background:'#FEF3C7',color:'#B45309'}}>🔔 {daysLeft}일 후</span>;
+        else if(daysLeft <= 60) reminderBadge = <span className="reminder-days" style={{background:'#F0FDF4',color:'#15803D'}}>✅ {daysLeft}일 후</span>;
+    }
+
+    return (
+        <div className="customer-card">
+            <button className="accordion-header" onClick={()=>setOpen(o=>!o)}>
+                <div style={{display:'flex',alignItems:'center',gap:10,flex:1}}>
+                    <div className="visit-badge">{visits.length}</div>
+                    <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <span className="card-name">{latest.name}</span>
+                            {latest.phone&&<span style={{fontSize:'12px',color:'#94A3B8',fontWeight:600}}>{latest.phone}</span>}
+                        </div>
+                        <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap',alignItems:'center'}}>
+                            {latest.frameType&&<span className="badge badge-blue">{latest.frameType}</span>}
+                            {latest.lensType&&<span className="badge badge-teal">{latest.lensType}</span>}
+                            {reminderBadge}
+                        </div>
+                    </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span className="card-date">{latest.purchaseDate||latest.date}</span>
+                    <span style={{fontSize:'18px',color:'#CBD5E1',transition:'transform 0.2s',transform:open?'rotate(180deg)':'rotate(0deg)'}}>⌄</span>
+                </div>
+            </button>
+
+            {open&&(
+                <div className="card-body">
+                    {/* 최신 처방전 */}
+                    {latest.rx&&(
+                        <div style={{marginBottom:10}}>
+                            <div style={{fontSize:'11px',fontWeight:800,color:'#94A3B8',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.5px'}}>📋 처방전</div>
+                            <div className="rx-grid" style={{gridTemplateColumns:'40px repeat(4,1fr)'}}>
+                                <div/>
+                                {['SPH','CYL','AXIS','ADD'].map(h=><div key={h} className="rx-cell"><div className="rx-label">{h}</div></div>)}
+                                {['R','L'].map(eye=>(
+                                    <React.Fragment key={eye}>
+                                        <div className="rx-cell"><div className="rx-label" style={{color:'#334155'}}>{eye}</div></div>
+                                        {['SPH','CYL','AXIS','ADD'].map(k=>(
+                                            <div key={k} className="rx-cell"><div className="rx-val" style={{fontSize:'12px'}}>{latest.rx[eye]?.[k]||'-'}</div></div>
+                                        ))}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                            {latest.pd&&<div style={{fontSize:'12px',color:'#64748B',fontWeight:600,marginTop:4}}>PD (동공간거리): <strong>{latest.pd}</strong></div>}
+                        </div>
+                    )}
+
+                    {/* 제품 정보 */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+                        {latest.frameProduct&&(
+                            <div style={{background:'#EFF6FF',borderRadius:10,padding:'8px 10px'}}>
+                                <div style={{fontSize:'10px',fontWeight:800,color:'#3B82F6',marginBottom:2}}>프레임</div>
+                                <div style={{fontSize:'12px',fontWeight:700,color:'#1E293B'}}>{latest.frameProduct}</div>
+                                {latest.framePrice&&<div style={{fontSize:'11px',color:'#64748B'}}>{parseInt(latest.framePrice).toLocaleString()}원</div>}
+                            </div>
+                        )}
+                        {latest.lensProduct&&(
+                            <div style={{background:'#F0FDFA',borderRadius:10,padding:'8px 10px'}}>
+                                <div style={{fontSize:'10px',fontWeight:800,color:'#0D9488',marginBottom:2}}>렌즈</div>
+                                <div style={{fontSize:'12px',fontWeight:700,color:'#1E293B'}}>{latest.lensProduct}</div>
+                                {latest.lensPrice&&<div style={{fontSize:'11px',color:'#64748B'}}>{parseInt(latest.lensPrice).toLocaleString()}원</div>}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 메모 */}
+                    {latest.memo&&(
+                        <div style={{background:'#FFFBEB',borderRadius:10,padding:'8px 12px',marginBottom:10,border:'1px solid #FDE68A'}}>
+                            <div style={{fontSize:'10px',fontWeight:800,color:'#B45309',marginBottom:2}}>📝 특이사항</div>
+                            <div style={{fontSize:'12px',fontWeight:600,color:'#78350F'}}>{latest.memo}</div>
+                        </div>
+                    )}
+
+                    {/* 결제 & 합계 */}
+                    <div className="card-total-row">
+                        <div>
+                            {latest.payMethod&&<span className="badge badge-gray">{latest.payMethod}</span>}
+                        </div>
+                        <div>
+                            <div style={{fontSize:'11px',color:'#94A3B8',fontWeight:600,textAlign:'right'}}>합계</div>
+                            <div className="card-total-val">{((parseInt(latest.framePrice||0)+parseInt(latest.lensPrice||0)+parseInt(latest.extraFee||0))).toLocaleString()}원</div>
+                        </div>
+                    </div>
+
+                    {/* 재방문 예정 */}
+                    {nextDate&&(
+                        <div style={{background:'#F8FAFC',borderRadius:10,padding:'8px 12px',marginTop:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <span style={{fontSize:'12px',fontWeight:700,color:'#64748B'}}>🔔 다음 방문 예정</span>
+                            <span style={{fontSize:'13px',fontWeight:800,color:daysLeft<0?'#B91C1C':daysLeft<=30?'#B45309':'#0D9488'}}>{nextDate}</span>
+                        </div>
+                    )}
+
+                    {/* 액션 버튼 */}
+                    <div style={{display:'flex',gap:8,marginTop:12}}>
+                        {latest.phone&&(
+                            <a href={`sms:${latest.phone}?body=${encodeURIComponent(`안녕하세요 ${latest.name}님 😊\n안경 교체 시기가 다가왔어요 👓\n편하게 방문해 주세요!\n감사합니다!`)}`}
+                                style={{flex:1,padding:'9px',background:'#EFF6FF',color:'#1D4ED8',borderRadius:'11px',fontSize:'12px',fontWeight:800,textDecoration:'none',textAlign:'center'}}>
+                                💬 문자 보내기
+                            </a>
+                        )}
+                        <button onClick={()=>onNewVisit(latest)} style={{flex:1,padding:'9px',background:'#F0FDFA',color:'#0D9488',borderRadius:'11px',fontSize:'12px',fontWeight:800,border:'none',cursor:'pointer'}}>
+                            ➕ 재방문 등록
+                        </button>
+                        <button onClick={()=>onEdit(latest)} style={{width:'38px',height:'38px',background:'#F1F5F9',borderRadius:'11px',border:'none',cursor:'pointer',fontSize:'16px'}}>✏️</button>
+                        <button onClick={()=>onDelete(latest)} style={{width:'38px',height:'38px',background:'#FFF1F2',borderRadius:'11px',border:'none',cursor:'pointer',fontSize:'16px'}}>🗑️</button>
+                    </div>
+
+                    {/* 방문 이력 토글 */}
+                    {visits.length>1&&(
+                        <>
+                            <button onClick={()=>setHistOpen(o=>!o)} style={{width:'100%',padding:'10px',background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:'12px',fontSize:'12px',fontWeight:700,color:'#94A3B8',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginTop:10}}>
+                                🕐 방문 이력 {visits.length-1}건 {histOpen?'접기':'보기'}
+                            </button>
+                            {histOpen&&visits.slice(1).map((v,i)=>(
+                                <div key={v.fbKey||i} style={{background:'#F8FAFC',borderRadius:12,padding:'10px 12px',marginTop:6,border:'1px solid #E2E8F0'}}>
+                                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                                        <span style={{fontSize:'12px',fontWeight:800,color:'#334155'}}>{v.purchaseDate||v.date}</span>
+                                        <span style={{fontSize:'12px',fontWeight:700,color:'#94A3B8'}}>{(parseInt(v.framePrice||0)+parseInt(v.lensPrice||0)+parseInt(v.extraFee||0)).toLocaleString()}원</span>
+                                    </div>
+                                    {v.frameProduct&&<div style={{fontSize:'11px',color:'#64748B'}}>프레임: {v.frameProduct}</div>}
+                                    {v.lensProduct&&<div style={{fontSize:'11px',color:'#64748B'}}>렌즈: {v.lensProduct}</div>}
+                                    {v.rx&&(
+                                        <div style={{fontSize:'10px',color:'#94A3B8',marginTop:3}}>
+                                            R: SPH {v.rx.R?.SPH||'-'} / L: SPH {v.rx.L?.SPH||'-'}
+                                        </div>
+                                    )}
+                                    <div style={{display:'flex',gap:4,marginTop:6}}>
+                                        <button onClick={()=>onEdit(v)} style={{padding:'4px 10px',background:'#EFF6FF',color:'#1D4ED8',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'11px',fontWeight:700}}>✏️ 수정</button>
+                                        <button onClick={()=>onDelete(v)} style={{padding:'4px 10px',background:'#FEF2F2',color:'#B91C1C',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'11px',fontWeight:700}}>🗑️ 삭제</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 📝 등록 폼
+// ══════════════════════════════════════════════
+const VisitForm = ({uid, prefill, onSaved, onCancel, sport}) => {
+    const today = getTodayKST();
+    const [form, setForm] = useState({
+        name: prefill?.name||'',
+        phone: prefill?.phone||'',
+        birth: prefill?.birth||'',
+        purchaseDate: today,
+        // 처방전
+        rx: prefill?.rx || {R:{SPH:'',CYL:'',AXIS:'',ADD:''},L:{SPH:'',CYL:'',AXIS:'',ADD:''}},
+        pd: prefill?.pd||'',
+        // 제품
+        frameType: prefill?.frameType||'',
+        frameProduct: prefill?.frameProduct||'',
+        framePrice: prefill?.framePrice||'',
+        lensType: prefill?.lensType||'',
+        lensProduct: prefill?.lensProduct||'',
+        lensPrice: prefill?.lensPrice||'',
+        // 결제
+        extraFee: prefill?.extraFee||'',
+        payMethod: prefill?.payMethod||'현금',
+        // 재방문
+        nextVisit: prefill?.nextVisit||addMonths(today,12),
+        memo: prefill?.memo||'',
+    });
+    const [saving, setSaving] = useState(false);
+
+    const set = (k,v) => setForm(f=>({...f,[k]:v}));
+    const setRx = (eye,k,v) => setForm(f=>({...f,rx:{...f.rx,[eye]:{...f.rx[eye],[k]:v}}}));
+
+    const total = (parseInt(form.framePrice||0)+parseInt(form.lensPrice||0)+parseInt(form.extraFee||0));
+
+    const handleSave = async () => {
+        if(!form.name.trim()){alert('고객명을 입력해주세요.');return;}
+        setSaving(true);
+        const payload = {...form, date: prefill?.date||today, updatedAt: Date.now()};
+        try {
+            if(prefill?.fbKey) {
+                await db.ref(`users/${uid}/optical/${prefill.fbKey}`).update(payload);
+            } else {
+                await db.ref(`users/${uid}/optical`).push(payload);
+            }
+            onSaved();
+        } catch(e){ alert('저장 오류: '+e.message); }
+        setSaving(false);
+    };
+
+    const frameTypes = ['풀림(보통테)','반무테','무테','선글라스','안전경','기타'];
+    const lensTypes = ['단초점','이중초점','누진다초점','컬러렌즈','선글라스렌즈','기타'];
+    const payMethods = ['현금','카드','계좌이체','할부','쿠폰','기타'];
+
+    return (
+        <div style={{padding:'0 12px 100px',paddingTop:'10px'}}>
+            <div className="form-card">
+                <div className="form-title">👤 기본 정보</div>
+                <div className="form-grid-2">
+                    <div className="form-group">
+                        <label className="form-label">고객명 *</label>
+                        <input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="홍길동" className="form-input"/>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">연락처</label>
+                        <input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="010-0000-0000" className="form-input" type="tel"/>
+                    </div>
+                </div>
+                <div className="form-grid-2">
+                    <div className="form-group">
+                        <label className="form-label">생년월일</label>
+                        <input value={form.birth} onChange={e=>set('birth',e.target.value)} className="form-input" type="date"/>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">구매일</label>
+                        <input value={form.purchaseDate} onChange={e=>set('purchaseDate',e.target.value)} className="form-input" type="date"/>
+                    </div>
+                </div>
+            </div>
+
+            <div className="form-card">
+                <div className="form-title">📋 처방전 (굴절검사)</div>
+                <div style={{overflowX:'auto'}}>
+                    <div style={{minWidth:'320px'}}>
+                        {['R','L'].map(eye=>(
+                            <div key={eye} style={{marginBottom:'10px'}}>
+                                <div style={{fontSize:'12px',fontWeight:800,color:eye==='R'?'#2563EB':'#0D9488',marginBottom:'6px'}}>
+                                    {eye==='R'?'우안 (R / OD)':'좌안 (L / OS)'}
+                                </div>
+                                <div className="form-grid-4">
+                                    {['SPH','CYL','AXIS','ADD'].map(k=>(
+                                        <div key={k}>
+                                            <label className="form-label">{k}</label>
+                                            <input value={form.rx[eye][k]} onChange={e=>setRx(eye,k,e.target.value)}
+                                                placeholder={k==='AXIS'?'0':'0.00'} className="form-input"
+                                                style={{textAlign:'center',padding:'10px 4px'}}/>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">PD (동공간거리, mm)</label>
+                    <input value={form.pd} onChange={e=>set('pd',e.target.value)} placeholder="예: 64 또는 32/32" className="form-input"/>
+                </div>
+            </div>
+
+            <div className="form-card">
+                <div className="form-title">🕶️ 프레임 정보</div>
+                <div className="form-group">
+                    <label className="form-label">프레임 종류</label>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                        {frameTypes.map(t=>(
+                            <button key={t} onClick={()=>set('frameType',t)} style={{padding:'6px 12px',borderRadius:'20px',border:`1.5px solid ${form.frameType===t?'#2563EB':'#E2E8F0'}`,background:form.frameType===t?'#EFF6FF':'#fff',color:form.frameType===t?'#1D4ED8':'#64748B',fontSize:'12px',fontWeight:700,cursor:'pointer'}}>
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">프레임 제품명/모델</label>
+                    <input value={form.frameProduct} onChange={e=>set('frameProduct',e.target.value)} placeholder="예: 린드버그 에어 타이타늄" className="form-input"/>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">프레임 가격 (원)</label>
+                    <input value={form.framePrice} onChange={e=>set('framePrice',e.target.value)} placeholder="0" className="form-input" type="number" inputMode="numeric"/>
+                </div>
+            </div>
+
+            <div className="form-card">
+                <div className="form-title">🔬 렌즈 정보</div>
+                <div className="form-group">
+                    <label className="form-label">렌즈 종류</label>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                        {lensTypes.map(t=>(
+                            <button key={t} onClick={()=>set('lensType',t)} style={{padding:'6px 12px',borderRadius:'20px',border:`1.5px solid ${form.lensType===t?'#0D9488':'#E2E8F0'}`,background:form.lensType===t?'#F0FDFA':'#fff',color:form.lensType===t?'#0D9488':'#64748B',fontSize:'12px',fontWeight:700,cursor:'pointer'}}>
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">렌즈 제품명/코팅</label>
+                    <input value={form.lensProduct} onChange={e=>set('lensProduct',e.target.value)} placeholder="예: 호야 셀룩스 1.67 블루컨트롤" className="form-input"/>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">렌즈 가격 (원)</label>
+                    <input value={form.lensPrice} onChange={e=>set('lensPrice',e.target.value)} placeholder="0" className="form-input" type="number" inputMode="numeric"/>
+                </div>
+            </div>
+
+            <div className="form-card">
+                <div className="form-title">💳 결제 정보</div>
+                <div className="form-group">
+                    <label className="form-label">기타 비용 (원)</label>
+                    <input value={form.extraFee} onChange={e=>set('extraFee',e.target.value)} placeholder="추가 수리비, 클리닝 등" className="form-input" type="number" inputMode="numeric"/>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">결제 방법</label>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                        {payMethods.map(m=>(
+                            <button key={m} onClick={()=>set('payMethod',m)} style={{padding:'6px 12px',borderRadius:'20px',border:`1.5px solid ${form.payMethod===m?'#7C3AED':'#E2E8F0'}`,background:form.payMethod===m?'#F5F3FF':'#fff',color:form.payMethod===m?'#7C3AED':'#64748B',fontSize:'12px',fontWeight:700,cursor:'pointer'}}>
+                                {m}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{background:'linear-gradient(135deg,#EFF6FF,#DBEAFE)',borderRadius:'14px',padding:'14px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',border:'1px solid #BFDBFE'}}>
+                    <span style={{fontSize:'13px',fontWeight:800,color:'#1D4ED8'}}>총 합계</span>
+                    <span style={{fontSize:'24px',fontWeight:900,color:'#1D4ED8'}}>{total.toLocaleString()}원</span>
+                </div>
+            </div>
+
+            <div className="form-card">
+                <div className="form-title">🔔 재방문 & 메모</div>
+                <div className="form-group">
+                    <label className="form-label">다음 방문 예정일</label>
+                    <input value={form.nextVisit} onChange={e=>set('nextVisit',e.target.value)} className="form-input" type="date"/>
+                    <div style={{display:'flex',gap:'6px',marginTop:'8px',flexWrap:'wrap'}}>
+                        {[{label:'6개월',months:6},{label:'1년',months:12},{label:'1년 6개월',months:18},{label:'2년',months:24}].map(({label,months})=>(
+                            <button key={label} onClick={()=>set('nextVisit',addMonths(form.purchaseDate,months))} style={{padding:'5px 11px',borderRadius:'20px',border:'1.5px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:'11px',fontWeight:700,cursor:'pointer'}}>
+                                +{label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">특이사항 / 메모</label>
+                    <textarea value={form.memo} onChange={e=>set('memo',e.target.value)} placeholder="예: 빛번짐 심함, 어지러움 호소, 누진 초보..." rows={3} className="form-input" style={{resize:'none',lineHeight:'1.5'}}/>
+                </div>
+            </div>
+
+            <button onClick={handleSave} disabled={saving} className="submit-btn submit-btn-blue" style={{marginBottom:'10px',opacity:saving?0.6:1}}>
+                {saving?'저장 중...':prefill?.fbKey?'✅ 수정 완료':'✅ 등록 완료'}
+            </button>
+            <button onClick={onCancel} className="submit-btn submit-btn-gray">취소</button>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 📊 매출통계
+// ══════════════════════════════════════════════
+const StatsView = ({records}) => {
+    const today = getTodayKST();
+    const [selYear, setSelYear] = useState(today.slice(0,4));
+
+    const years = [...new Set(records.map(r=>(r.purchaseDate||r.date||'').slice(0,4)))].filter(Boolean).sort((a,b)=>b-a);
+    const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
+
+    const byMonth = useMemo(()=>{
+        const m = {};
+        records.filter(r=>(r.purchaseDate||r.date||'').startsWith(selYear)).forEach(r=>{
+            const mo = (r.purchaseDate||r.date||'').slice(5,7);
+            if(!m[mo]) m[mo]={count:0,frame:0,lens:0,total:0};
+            m[mo].count++;
+            m[mo].frame += parseInt(r.framePrice||0);
+            m[mo].lens += parseInt(r.lensPrice||0);
+            m[mo].total += parseInt(r.framePrice||0)+parseInt(r.lensPrice||0)+parseInt(r.extraFee||0);
+        });
+        return m;
+    },[records,selYear]);
+
+    const yearTotal = Object.values(byMonth).reduce((s,v)=>s+v.total,0);
+    const yearCount = Object.values(byMonth).reduce((s,v)=>s+v.count,0);
+
+    // 이번 달 통계
+    const thisMonth = today.slice(5,7);
+    const thisYear = today.slice(0,4);
+    const monthRecs = records.filter(r=>(r.purchaseDate||r.date||'').startsWith(`${thisYear}-${thisMonth}`));
+    const monthTotal = monthRecs.reduce((s,r)=>s+parseInt(r.framePrice||0)+parseInt(r.lensPrice||0)+parseInt(r.extraFee||0),0);
+
+    return (
+        <div className="content-pad">
+            <div style={{fontSize:'16px',fontWeight:900,color:'#111',padding:'12px 0 10px'}}>📊 매출통계</div>
+
+            {/* 이번 달 요약 */}
+            <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+                <div className="mini-stat-card">
+                    <div className="stat-num">{monthRecs.length}</div>
+                    <div className="stat-label-sm">이번 달 고객</div>
+                </div>
+                <div className="mini-stat-card">
+                    <div className="stat-num" style={{fontSize:'18px'}}>{monthTotal.toLocaleString()}</div>
+                    <div className="stat-label-sm">이번 달 매출(원)</div>
+                </div>
+                <div className="mini-stat-card">
+                    <div className="stat-num">{records.length}</div>
+                    <div className="stat-label-sm">전체 고객</div>
+                </div>
+            </div>
+
+            {/* 연도 선택 */}
+            <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'12px'}}>
+                {(years.length===0?[thisYear]:years).map(y=>(
+                    <button key={y} onClick={()=>setSelYear(y)} style={{padding:'7px 16px',borderRadius:'20px',border:`1.5px solid ${selYear===y?'#2563EB':'#E2E8F0'}`,background:selYear===y?'#EFF6FF':'#fff',color:selYear===y?'#1D4ED8':'#64748B',fontSize:'13px',fontWeight:700,cursor:'pointer'}}>
+                        {y}년
+                    </button>
+                ))}
+            </div>
+
+            {/* 연간 요약 */}
+            <div style={{background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:'18px',padding:'16px 20px',marginBottom:'12px',color:'#fff'}}>
+                <div style={{fontSize:'12px',fontWeight:700,opacity:0.7,marginBottom:'4px'}}>{selYear}년 연간 매출</div>
+                <div style={{fontSize:'28px',fontWeight:900}}>{yearTotal.toLocaleString()}원</div>
+                <div style={{fontSize:'12px',fontWeight:600,opacity:0.7,marginTop:'4px'}}>총 {yearCount}건</div>
+            </div>
+
+            {/* 월별 상세 */}
+            <div className="section-card">
+                <div className="section-header">
+                    <span className="section-title">월별 매출</span>
+                </div>
+                {months.map(mo=>{
+                    const d = byMonth[mo];
+                    if(!d) return (
+                        <div key={mo} style={{padding:'12px 16px',borderBottom:'1px solid #F8FAFC',display:'flex',justifyContent:'space-between',opacity:0.4}}>
+                            <span style={{fontSize:'13px',fontWeight:700,color:'#94A3B8'}}>{parseInt(mo)}월</span>
+                            <span style={{fontSize:'12px',color:'#94A3B8'}}>-</span>
+                        </div>
+                    );
+                    return (
+                        <div key={mo} style={{padding:'12px 16px',borderBottom:'1px solid #F8FAFC'}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'4px'}}>
+                                <span style={{fontSize:'14px',fontWeight:800,color:'#111'}}>{parseInt(mo)}월</span>
+                                <span style={{fontSize:'16px',fontWeight:900,color:'#1D4ED8'}}>{d.total.toLocaleString()}원</span>
+                            </div>
+                            <div style={{display:'flex',gap:'12px'}}>
+                                <span style={{fontSize:'11px',color:'#94A3B8',fontWeight:600}}>{d.count}건</span>
+                                <span style={{fontSize:'11px',color:'#3B82F6',fontWeight:600}}>프레임 {d.frame.toLocaleString()}</span>
+                                <span style={{fontSize:'11px',color:'#0D9488',fontWeight:600}}>렌즈 {d.lens.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 🔔 재방문 알림 뷰
+// ══════════════════════════════════════════════
+const RemindersView = ({grouped, onNewVisit}) => {
+    const today = getTodayKST();
+
+    const reminders = Object.values(grouped).map(visits=>{
+        const latest = visits[0];
+        const nextDate = latest.nextVisit || (latest.purchaseDate ? addMonths(latest.purchaseDate,12) : null);
+        if(!nextDate) return null;
+        const days = daysBetween(today, nextDate);
+        return {...latest, nextDate, daysLeft:days, visitCount:visits.length};
+    }).filter(Boolean).sort((a,b)=>a.daysLeft-b.daysLeft);
+
+    const overdue = reminders.filter(r=>r.daysLeft<0);
+    const soon = reminders.filter(r=>r.daysLeft>=0&&r.daysLeft<=60);
+    const upcoming = reminders.filter(r=>r.daysLeft>60);
+
+    const ReminderItem = ({r}) => (
+        <div className="reminder-card" style={{borderLeftColor: r.daysLeft<0?'#EF4444':r.daysLeft<=30?'#F59E0B':'#10B981'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                    <div className="reminder-name">{r.name}</div>
+                    <div className="reminder-sub">{r.phone||'연락처 없음'} · 방문 {r.visitCount}회</div>
+                    <div style={{fontSize:'11px',color:'#94A3B8',marginTop:2}}>예정일: {r.nextDate}</div>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                    <span className="reminder-days" style={{background:r.daysLeft<0?'#FEE2E2':r.daysLeft<=30?'#FEF3C7':'#D1FAE5',color:r.daysLeft<0?'#B91C1C':r.daysLeft<=30?'#B45309':'#065F46'}}>
+                        {r.daysLeft<0?`${Math.abs(r.daysLeft)}일 초과`:`${r.daysLeft}일 후`}
+                    </span>
+                    {r.phone&&(
+                        <a href={`sms:${r.phone}?body=${encodeURIComponent(`안녕하세요 ${r.name}님 😊\n안경 교체 시기가 ${r.daysLeft<0?'지났어요':'다가왔어요'} 👓\n편하게 방문해 주세요!\n감사합니다!`)}`}
+                            style={{fontSize:'10px',fontWeight:800,color:'#1D4ED8',textDecoration:'none',padding:'3px 8px',background:'#EFF6FF',borderRadius:'6px'}}>💬 문자</a>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="content-pad">
+            <div style={{fontSize:'16px',fontWeight:900,color:'#111',padding:'12px 0 10px'}}>🔔 재방문 알림</div>
+
+            {overdue.length>0&&(
+                <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',fontWeight:800,color:'#B91C1C',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.5px'}}>⚠️ 기간 초과 ({overdue.length}명)</div>
+                    {overdue.map(r=><ReminderItem key={r.fbKey} r={r}/>)}
+                </div>
+            )}
+            {soon.length>0&&(
+                <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',fontWeight:800,color:'#B45309',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.5px'}}>🔔 60일 이내 ({soon.length}명)</div>
+                    {soon.map(r=><ReminderItem key={r.fbKey} r={r}/>)}
+                </div>
+            )}
+            {upcoming.length>0&&(
+                <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',fontWeight:800,color:'#065F46',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.5px'}}>✅ 예정 ({upcoming.length}명)</div>
+                    {upcoming.map(r=><ReminderItem key={r.fbKey} r={r}/>)}
+                </div>
+            )}
+            {reminders.length===0&&(
+                <div className="empty-state">
+                    <div style={{fontSize:'40px',marginBottom:'12px'}}>🔔</div>
+                    재방문 예정 고객이 없습니다.<br/>고객 등록 시 다음 방문 예정일을 설정해 주세요.
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 📱 메인 앱
+// ══════════════════════════════════════════════
+const OpticalApp = ({uid}) => {
+    const [records, setRecords] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState('customers'); // customers | stats | reminders | settings
+    const [showForm, setShowForm] = useState(false);
+    const [editRecord, setEditRecord] = useState(null);
+    const [prefillName, setPrefillName] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [toast, setToast] = useState(null);
+    const [confirmModal, setConfirmModal] = useState(null);
+
+    const showToast = (msg, type='saved') => {
+        setToast({msg,type});
+        setTimeout(()=>setToast(null),2500);
+    };
+
+    // Firebase 구독
+    useEffect(()=>{
+        const ref = db.ref(`users/${uid}/optical`);
+        ref.on('value', snap=>{
+            const data = snap.val()||{};
+            const arr = Object.entries(data).map(([k,v])=>({...v,fbKey:k}));
+            arr.sort((a,b)=>((b.purchaseDate||b.date||'') > (a.purchaseDate||a.date||''))?1:-1);
+            setRecords(arr);
+            setLoading(false);
+        });
+        return ()=>ref.off();
+    },[uid]);
+
+    // 고객별 그룹화 (이름+연락처 기준)
+    const grouped = useMemo(()=>{
+        const g = {};
+        records.forEach(r=>{
+            const key = `${r.name}_${r.phone||''}`;
+            if(!g[key]) g[key]=[];
+            g[key].push(r);
+        });
+        return g;
+    },[records]);
+
+    // 검색 필터
+    const filteredGroups = useMemo(()=>{
+        if(!searchTerm) return grouped;
+        const result = {};
+        Object.entries(grouped).forEach(([k,visits])=>{
+            const v = visits[0];
+            if(matchSearch(v.name||'',searchTerm)||matchSearch(v.phone||'',searchTerm)||matchSearch(v.frameProduct||'',searchTerm)||matchSearch(v.lensProduct||'',searchTerm)) {
+                result[k]=visits;
+            }
+        });
+        return result;
+    },[grouped,searchTerm]);
+
+    // 재방문 알림 수
+    const today = getTodayKST();
+    const alertCount = useMemo(()=>{
+        return Object.values(grouped).filter(visits=>{
+            const latest = visits[0];
+            const nextDate = latest.nextVisit||(latest.purchaseDate?addMonths(latest.purchaseDate,12):null);
+            if(!nextDate) return false;
+            return daysBetween(today,nextDate)<=30;
+        }).length;
+    },[grouped,today]);
+
+    const handleDelete = (r) => {
+        setConfirmModal({msg:`${r.name}님의 방문 기록을 삭제할까요?`,onOk:async()=>{
+            await db.ref(`users/${uid}/optical/${r.fbKey}`).remove();
+            setConfirmModal(null);
+            showToast('삭제됐습니다.');
+        },okLabel:'삭제',cancelLabel:'취소',danger:true});
+    };
+
+    const handleEdit = (r) => { setEditRecord(r); setShowForm(true); };
+    const handleNewVisit = (r) => { setPrefillName(r); setEditRecord(null); setShowForm(true); };
+
+    const handleSaved = () => {
+        setShowForm(false); setEditRecord(null); setPrefillName(null);
+        showToast('✅ 저장됐습니다!');
+    };
+
+    // 엑셀 내보내기
+    const handleExportExcel = () => {
+        const rows = records.map(r=>({
+            고객명:r.name, 연락처:r.phone||'', 생년월일:r.birth||'',
+            구매일:r.purchaseDate||r.date||'',
+            우안SPH:r.rx?.R?.SPH||'', 우안CYL:r.rx?.R?.CYL||'', 우안AXIS:r.rx?.R?.AXIS||'', 우안ADD:r.rx?.R?.ADD||'',
+            좌안SPH:r.rx?.L?.SPH||'', 좌안CYL:r.rx?.L?.CYL||'', 좌안AXIS:r.rx?.L?.AXIS||'', 좌안ADD:r.rx?.L?.ADD||'',
+            PD:r.pd||'',
+            프레임종류:r.frameType||'', 프레임제품:r.frameProduct||'', 프레임가격:r.framePrice||0,
+            렌즈종류:r.lensType||'', 렌즈제품:r.lensProduct||'', 렌즈가격:r.lensPrice||0,
+            기타비용:r.extraFee||0, 결제방법:r.payMethod||'',
+            합계:parseInt(r.framePrice||0)+parseInt(r.lensPrice||0)+parseInt(r.extraFee||0),
+            다음방문예정:r.nextVisit||'', 메모:r.memo||''
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '고객목록');
+        XLSX.writeFile(wb, `안경원고객_${getTodayKST()}.xlsx`);
+    };
+
+    // 폼 화면
+    if(showForm) {
+        const prefill = editRecord || (prefillName ? {name:prefillName.name,phone:prefillName.phone,birth:prefillName.birth} : null);
+        return (
+            <div>
+                <div style={{background:'#0F172A',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,position:'sticky',top:0,zIndex:20}}>
+                    <button onClick={()=>{setShowForm(false);setEditRecord(null);setPrefillName(null);}} style={{background:'none',border:'none',color:'#94A3B8',fontSize:'22px',cursor:'pointer',padding:'0',lineHeight:1}}>←</button>
+                    <span style={{color:'#fff',fontSize:'15px',fontWeight:800}}>{editRecord?'방문기록 수정':'새 방문 등록'}</span>
+                </div>
+                <VisitForm uid={uid} prefill={prefill} onSaved={handleSaved} onCancel={()=>{setShowForm(false);setEditRecord(null);setPrefillName(null);}}/>
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            {/* 토스트 */}
+            {toast&&<div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+
+            {/* 재방문 알림 배너 */}
+            {alertCount>0&&viewMode==='customers'&&(
+                <div className="alert-banner" onClick={()=>setViewMode('reminders')}>
+                    <span style={{fontSize:'16px'}}>🔔</span>
+                    <span style={{fontSize:'13px',fontWeight:700,color:'#92400E',flex:1}}>재방문 예정 고객이 있어요</span>
+                    <span className="alert-count">{alertCount}명</span>
+                    <span style={{fontSize:'12px',color:'#B45309',fontWeight:700}}>보기 →</span>
+                </div>
+            )}
+
+            {/* 고객관리 탭 */}
+            {viewMode==='customers'&&(
+                <div className="content-pad">
+                    {/* 검색바 */}
+                    <div style={{padding:'10px 0 8px'}}>
+                        <div className="search-bar">
+                            <span style={{fontSize:'16px'}}>🔍</span>
+                            <input className="search-input" placeholder="이름, 연락처, 제품명 검색..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/>
+                            {searchTerm&&<button onClick={()=>setSearchTerm('')} style={{background:'none',border:'none',color:'#94A3B8',fontSize:'18px',cursor:'pointer',padding:'0',lineHeight:1}}>✕</button>}
+                        </div>
+                    </div>
+
+                    {loading&&<div style={{textAlign:'center',padding:'40px'}}><div className="spinner" style={{margin:'0 auto'}}/></div>}
+
+                    {!loading&&Object.keys(filteredGroups).length===0&&(
+                        <div className="empty-state">
+                            <div style={{fontSize:'50px',marginBottom:'12px'}}>👓</div>
+                            {searchTerm?'검색 결과가 없습니다.':'아직 등록된 고객이 없습니다.\n아래 ➕ 버튼을 눌러 첫 고객을 등록해 보세요!'}
+                        </div>
+                    )}
+
+                    {Object.entries(filteredGroups).map(([key,visits])=>(
+                        <CustomerCard key={key} visits={visits} onEdit={handleEdit} onDelete={handleDelete} onNewVisit={handleNewVisit}/>
+                    ))}
+                </div>
+            )}
+
+            {viewMode==='stats'&&<StatsView records={records}/>}
+            {viewMode==='reminders'&&<RemindersView grouped={grouped} onNewVisit={handleNewVisit}/>}
+
+            {/* 설정 탭 */}
+            {viewMode==='settings'&&(
+                <div className="content-pad">
+                    <div style={{fontSize:'16px',fontWeight:900,color:'#111',padding:'12px 0 10px'}}>⚙️ 설정</div>
+                    <div className="section-card" style={{marginBottom:'12px'}}>
+                        <div className="section-header"><span className="section-title">📊 데이터 관리</span></div>
+                        <div style={{padding:'16px'}}>
+                            <p style={{fontSize:'12px',color:'#94A3B8',marginBottom:'12px',fontWeight:600}}>고객 데이터를 엑셀 파일로 내보낼 수 있어요.</p>
+                            <button onClick={handleExportExcel} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#15803D,#22C55E)',color:'#fff',borderRadius:'13px',border:'none',fontWeight:800,fontSize:'14px',cursor:'pointer',boxShadow:'0 4px 12px rgba(34,197,94,0.3)'}}>
+                                📤 엑셀 내보내기
+                            </button>
+                        </div>
+                    </div>
+                    <div className="section-card">
+                        <div className="section-header"><span className="section-title">ℹ️ 앱 정보</span></div>
+                        <div style={{padding:'16px'}}>
+                            <div style={{fontSize:'13px',color:'#64748B',fontWeight:600,lineHeight:1.7}}>
+                                <div>📌 버전: 1.0.0</div>
+                                <div>👓 안경원 고객관리 시스템</div>
+                                <div>🔒 데이터는 Firebase에 안전하게 저장됩니다.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 하단 네비게이션 */}
+            <div className="bottom-nav">
+                <button className={`nav-item ${viewMode==='customers'?'active':''}`} onClick={()=>{setViewMode('customers');setSearchTerm('');}}>
+                    <div className="nav-icon">🏠</div>
+                    <span className="nav-label">고객관리</span>
+                </button>
+                <button className={`nav-item ${viewMode==='reminders'?'active':''}`} onClick={()=>setViewMode('reminders')}>
+                    <div className="nav-icon" style={{position:'relative'}}>
+                        🔔
+                        {alertCount>0&&<span style={{position:'absolute',top:2,right:2,width:'14px',height:'14px',background:'#EF4444',borderRadius:'50%',fontSize:'8px',fontWeight:900,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>{alertCount>9?'9+':alertCount}</span>}
+                    </div>
+                    <span className="nav-label">알림</span>
+                </button>
+                {/* 가운데 등록 버튼 */}
+                <button className="nav-center-btn" onClick={()=>{setEditRecord(null);setPrefillName(null);setShowForm(true);}}>
+                    <div className="nav-center-inner">➕</div>
+                    <span className="nav-center-label">등록</span>
+                </button>
+                <button className={`nav-item ${viewMode==='stats'?'active':''}`} onClick={()=>setViewMode('stats')}>
+                    <div className="nav-icon">📊</div>
+                    <span className="nav-label">매출통계</span>
+                </button>
+                <button className={`nav-item ${viewMode==='settings'?'active':''}`} onClick={()=>setViewMode('settings')}>
+                    <div className="nav-icon">⚙️</div>
+                    <span className="nav-label">설정</span>
+                </button>
+            </div>
+
+            {/* 확인 모달 */}
+            {confirmModal&&(
+                <div className="modal-overlay" onClick={()=>setConfirmModal(null)}>
+                    <div className="modal-box" onClick={e=>e.stopPropagation()}>
+                        <div className="modal-title">확인</div>
+                        <div className="modal-msg">{confirmModal.msg}</div>
+                        <div className="modal-btns">
+                            <button className="modal-btn modal-btn-cancel" onClick={()=>setConfirmModal(null)}>{confirmModal.cancelLabel||'취소'}</button>
+                            <button className={`modal-btn ${confirmModal.danger?'modal-btn-danger':'modal-btn-ok'}`} onClick={confirmModal.onOk}>{confirmModal.okLabel||'확인'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
+// 🏆 최상위 앱
+// ══════════════════════════════════════════════
+const App = () => {
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+
+    useEffect(()=>{
+        const unsub = auth.onAuthStateChanged(u=>{ setUser(u); setAuthLoading(false); });
+        return ()=>unsub();
+    },[]);
+
+    if(authLoading) return (
+        <div style={{minHeight:'100vh',background:'#0F172A',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{textAlign:'center'}}>
+                <div className="spinner" style={{margin:'0 auto 16px'}}/>
+                <p style={{color:'#475569',fontSize:'13px',fontWeight:600}}>로딩 중...</p>
+            </div>
+        </div>
+    );
+
+    if(!user) return <LoginScreen/>;
+
+    return (
+        <div style={{minHeight:'100vh',background:'#F1F5F9'}}>
+            <div className="app-header">
+                <div className="header-top">
+                    <div className="header-brand">
+                        <div className="header-logo">👓</div>
+                        <div>
+                            <div className="header-title">안경원 고객관리</div>
+                            <div className="header-sub">{user.email}</div>
+                        </div>
+                    </div>
+                    <button onClick={()=>auth.signOut()} className="logout-btn">로그아웃</button>
+                </div>
+            </div>
+            <OpticalApp key={user.uid} uid={user.uid}/>
+        </div>
+    );
+};
+
+ReactDOM.render(<App/>, document.getElementById('root'));
+</script>
+</body>
+</html>
