@@ -266,8 +266,8 @@ const LoginScreen = () => {
 
     const handleGoogle = async () => {
         const provider = new firebase.auth.GoogleAuthProvider();
-        try { await auth.signInWithRedirect(provider); }
-        catch(e) { setErr('구글 로그인 오류'); }
+        try { await auth.signInWithPopup(provider); }
+        catch(e) { setErr('구글 로그인 오류: '+e.message); }
     };
 
     if(resetSent) return (
