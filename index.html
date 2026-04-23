@@ -319,6 +319,30 @@ const LoginScreen = () => {
 };
 
 // ══════════════════════════════════════════════
+// ⏳ 승인 대기 화면
+// ══════════════════════════════════════════════
+const PendingScreen = ({user}) => (
+    <div className="login-screen">
+        <div className="login-card" style={{textAlign:'center'}}>
+            <div style={{fontSize:'52px',marginBottom:'16px'}}>⏳</div>
+            <h2 style={{fontSize:'20px',fontWeight:900,color:'#fff',marginBottom:'10px'}}>승인 대기 중</h2>
+            <p style={{fontSize:'13px',color:'#475569',marginBottom:'8px',lineHeight:1.6}}>
+                <strong style={{color:'#94A3B8'}}>{user.email}</strong><br/>
+                관리자의 승인을 기다리고 있어요.<br/>승인 후 이용 가능합니다.
+            </p>
+            <div style={{background:'rgba(37,99,235,0.1)',border:'1px solid rgba(37,99,235,0.3)',borderRadius:'12px',padding:'12px',marginBottom:'20px'}}>
+                <p style={{fontSize:'12px',color:'#60A5FA',fontWeight:600,margin:0}}>
+                    📞 관리자에게 문의하거나<br/>잠시 후 다시 확인해 주세요.
+                </p>
+            </div>
+            <button onClick={()=>auth.signOut()} style={{width:'100%',padding:'13px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',color:'#94A3B8',borderRadius:'14px',fontSize:'14px',fontWeight:700,cursor:'pointer'}}>
+                로그아웃
+            </button>
+        </div>
+    </div>
+);
+
+// ══════════════════════════════════════════════
 // 📋 처방전 미니 뷰
 // ══════════════════════════════════════════════
 const RxView = ({rx, side='양안'}) => {
@@ -879,9 +903,119 @@ const RemindersView = ({grouped, onNewVisit}) => {
 };
 
 // ══════════════════════════════════════════════
+// ⚙️ 설정 뷰 (관리자 승인 기능 포함)
+// ══════════════════════════════════════════════
+const SettingsView = ({uid, isAdmin, handleExportExcel}) => {
+    const [pendingUsers, setPendingUsers] = useState([]);
+    const [approvedUsers, setApprovedUsers] = useState([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+
+    useEffect(()=>{
+        if(!isAdmin) return;
+        setLoadingUsers(true);
+        const ref = db.ref('users_status');
+        ref.on('value', snap=>{
+            const data = snap.val()||{};
+            const pending = [], approved = [];
+            Object.entries(data).forEach(([uid, info])=>{
+                if(info.status==='pending') pending.push({uid,...info});
+                else if(info.status==='approved') approved.push({uid,...info});
+            });
+            setPendingUsers(pending);
+            setApprovedUsers(approved);
+            setLoadingUsers(false);
+        });
+        return ()=>ref.off();
+    },[isAdmin]);
+
+    const handleApprove = async (targetUid) => {
+        await db.ref(`users_status/${targetUid}/status`).set('approved');
+    };
+    const handleReject = async (targetUid) => {
+        await db.ref(`users_status/${targetUid}/status`).set('rejected');
+    };
+    const handleRevoke = async (targetUid) => {
+        await db.ref(`users_status/${targetUid}/status`).set('pending');
+    };
+
+    return (
+        <div className="content-pad">
+            <div style={{fontSize:'16px',fontWeight:900,color:'#111',padding:'12px 0 10px'}}>⚙️ 설정</div>
+
+            {/* 관리자 전용: 사용자 승인 */}
+            {isAdmin&&(
+                <div className="section-card" style={{marginBottom:'12px'}}>
+                    <div className="section-header">
+                        <span className="section-title">👥 사용자 승인 관리</span>
+                        {pendingUsers.length>0&&<span style={{background:'#EF4444',color:'#fff',fontSize:'11px',fontWeight:800,padding:'2px 8px',borderRadius:'20px'}}>{pendingUsers.length}명 대기</span>}
+                    </div>
+                    <div style={{padding:'0 16px 16px'}}>
+                        {loadingUsers&&<div style={{textAlign:'center',padding:'20px',color:'#94A3B8',fontSize:'12px'}}>불러오는 중...</div>}
+
+                        {!loadingUsers&&pendingUsers.length===0&&(
+                            <div style={{textAlign:'center',padding:'16px',color:'#94A3B8',fontSize:'12px',fontWeight:600}}>
+                                대기 중인 사용자가 없습니다 ✅
+                            </div>
+                        )}
+
+                        {pendingUsers.map(u=>(
+                            <div key={u.uid} style={{background:'#FFFBEB',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'1px solid #FDE68A'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                    <div>
+                                        <div style={{fontSize:'13px',fontWeight:800,color:'#111'}}>{u.email}</div>
+                                        <div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>가입: {u.createdAt||'-'}</div>
+                                    </div>
+                                    <div style={{display:'flex',gap:'6px'}}>
+                                        <button onClick={()=>handleApprove(u.uid)} style={{padding:'7px 14px',background:'linear-gradient(135deg,#15803D,#22C55E)',color:'#fff',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:800,cursor:'pointer'}}>승인</button>
+                                        <button onClick={()=>handleReject(u.uid)} style={{padding:'7px 12px',background:'#FEE2E2',color:'#B91C1C',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:800,cursor:'pointer'}}>거절</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+
+                        {approvedUsers.length>0&&(
+                            <>
+                                <div style={{fontSize:'11px',fontWeight:800,color:'#94A3B8',marginTop:'12px',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.5px'}}>승인된 사용자 ({approvedUsers.length}명)</div>
+                                {approvedUsers.map(u=>(
+                                    <div key={u.uid} style={{background:'#F0FDF4',borderRadius:'12px',padding:'10px 12px',marginBottom:'6px',border:'1px solid #BBF7D0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                        <div style={{fontSize:'12px',fontWeight:700,color:'#166534'}}>{u.email}</div>
+                                        <button onClick={()=>handleRevoke(u.uid)} style={{padding:'5px 10px',background:'#FEE2E2',color:'#B91C1C',border:'none',borderRadius:'8px',fontSize:'11px',fontWeight:700,cursor:'pointer'}}>취소</button>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            <div className="section-card" style={{marginBottom:'12px'}}>
+                <div className="section-header"><span className="section-title">📊 데이터 관리</span></div>
+                <div style={{padding:'16px'}}>
+                    <p style={{fontSize:'12px',color:'#94A3B8',marginBottom:'12px',fontWeight:600}}>고객 데이터를 엑셀 파일로 내보낼 수 있어요.</p>
+                    <button onClick={handleExportExcel} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#15803D,#22C55E)',color:'#fff',borderRadius:'13px',border:'none',fontWeight:800,fontSize:'14px',cursor:'pointer',boxShadow:'0 4px 12px rgba(34,197,94,0.3)'}}>
+                        📤 엑셀 내보내기
+                    </button>
+                </div>
+            </div>
+            <div className="section-card">
+                <div className="section-header"><span className="section-title">ℹ️ 앱 정보</span></div>
+                <div style={{padding:'16px'}}>
+                    <div style={{fontSize:'13px',color:'#64748B',fontWeight:600,lineHeight:1.7}}>
+                        <div>📌 버전: 1.1.0</div>
+                        <div>👓 안경원 고객관리 시스템</div>
+                        <div>🔒 데이터는 Firebase에 안전하게 저장됩니다.</div>
+                        {isAdmin&&<div style={{marginTop:'6px',color:'#1D4ED8'}}>🔑 관리자 계정으로 접속 중</div>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════
 // 📱 메인 앱
 // ══════════════════════════════════════════════
-const OpticalApp = ({uid}) => {
+const OpticalApp = ({uid, isAdmin}) => {
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('customers'); // customers | stats | reminders | settings
@@ -1042,28 +1176,7 @@ const OpticalApp = ({uid}) => {
 
             {/* 설정 탭 */}
             {viewMode==='settings'&&(
-                <div className="content-pad">
-                    <div style={{fontSize:'16px',fontWeight:900,color:'#111',padding:'12px 0 10px'}}>⚙️ 설정</div>
-                    <div className="section-card" style={{marginBottom:'12px'}}>
-                        <div className="section-header"><span className="section-title">📊 데이터 관리</span></div>
-                        <div style={{padding:'16px'}}>
-                            <p style={{fontSize:'12px',color:'#94A3B8',marginBottom:'12px',fontWeight:600}}>고객 데이터를 엑셀 파일로 내보낼 수 있어요.</p>
-                            <button onClick={handleExportExcel} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#15803D,#22C55E)',color:'#fff',borderRadius:'13px',border:'none',fontWeight:800,fontSize:'14px',cursor:'pointer',boxShadow:'0 4px 12px rgba(34,197,94,0.3)'}}>
-                                📤 엑셀 내보내기
-                            </button>
-                        </div>
-                    </div>
-                    <div className="section-card">
-                        <div className="section-header"><span className="section-title">ℹ️ 앱 정보</span></div>
-                        <div style={{padding:'16px'}}>
-                            <div style={{fontSize:'13px',color:'#64748B',fontWeight:600,lineHeight:1.7}}>
-                                <div>📌 버전: 1.0.0</div>
-                                <div>👓 안경원 고객관리 시스템</div>
-                                <div>🔒 데이터는 Firebase에 안전하게 저장됩니다.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <SettingsView uid={uid} isAdmin={isAdmin} handleExportExcel={handleExportExcel}/>
             )}
 
             {/* 하단 네비게이션 */}
@@ -1115,13 +1228,47 @@ const OpticalApp = ({uid}) => {
 // 🏆 최상위 앱
 // ══════════════════════════════════════════════
 const App = () => {
+    // ⚠️ 여기에 관리자 이메일을 입력하세요!
+    const ADMIN_EMAIL = 'your-admin@email.com'; // ← 본인 이메일로 변경
+
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
+    const [userStatus, setUserStatus] = useState(null); // null | 'pending' | 'approved' | 'rejected'
 
     useEffect(()=>{
-        const unsub = auth.onAuthStateChanged(u=>{ setUser(u); setAuthLoading(false); });
+        const unsub = auth.onAuthStateChanged(async u=>{
+            setUser(u);
+            if(u) {
+                // 관리자는 바로 승인
+                if(u.email === ADMIN_EMAIL) {
+                    setUserStatus('approved');
+                    setAuthLoading(false);
+                    return;
+                }
+                // 일반 사용자: DB에서 상태 확인
+                const ref = db.ref(`users_status/${u.uid}`);
+                const snap = await ref.get();
+                if(!snap.exists()) {
+                    // 최초 로그인 → 대기 상태로 등록
+                    const today = new Date().toISOString().split('T')[0];
+                    await ref.set({email: u.email, status: 'pending', createdAt: today});
+                    setUserStatus('pending');
+                } else {
+                    setUserStatus(snap.val().status || 'pending');
+                }
+                // 실시간 상태 변경 감지
+                ref.on('value', snap2=>{
+                    if(snap2.exists()) setUserStatus(snap2.val().status||'pending');
+                });
+            } else {
+                setUserStatus(null);
+            }
+            setAuthLoading(false);
+        });
         return ()=>unsub();
     },[]);
+
+    const isAdmin = user?.email === ADMIN_EMAIL;
 
     if(authLoading) return (
         <div style={{minHeight:'100vh',background:'#0F172A',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -1133,6 +1280,17 @@ const App = () => {
     );
 
     if(!user) return <LoginScreen/>;
+    if(userStatus==='pending') return <PendingScreen user={user}/>;
+    if(userStatus==='rejected') return (
+        <div className="login-screen">
+            <div className="login-card" style={{textAlign:'center'}}>
+                <div style={{fontSize:'52px',marginBottom:'16px'}}>🚫</div>
+                <h2 style={{fontSize:'20px',fontWeight:900,color:'#fff',marginBottom:'10px'}}>접근이 거절되었습니다</h2>
+                <p style={{fontSize:'13px',color:'#475569',marginBottom:'20px'}}>관리자에게 문의해 주세요.</p>
+                <button onClick={()=>auth.signOut()} style={{width:'100%',padding:'13px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',color:'#94A3B8',borderRadius:'14px',fontSize:'14px',fontWeight:700,cursor:'pointer'}}>로그아웃</button>
+            </div>
+        </div>
+    );
 
     return (
         <div style={{minHeight:'100vh',background:'#F1F5F9'}}>
@@ -1142,13 +1300,13 @@ const App = () => {
                         <div className="header-logo">👓</div>
                         <div>
                             <div className="header-title">안경원 고객관리</div>
-                            <div className="header-sub">{user.email}</div>
+                            <div className="header-sub">{user.email}{isAdmin&&' 👑'}</div>
                         </div>
                     </div>
                     <button onClick={()=>auth.signOut()} className="logout-btn">로그아웃</button>
                 </div>
             </div>
-            <OpticalApp key={user.uid} uid={user.uid}/>
+            <OpticalApp key={user.uid} uid={user.uid} isAdmin={isAdmin}/>
         </div>
     );
 };
